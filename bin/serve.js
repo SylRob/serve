@@ -4,7 +4,6 @@
 const http = require('http');
 const path = require('path');
 const fs = require('fs');
-const SSI = require('./ssi.js');
 const Readable = require('stream').Readable;
 const {promisify} = require('util');
 const {parse} = require('url');
@@ -20,8 +19,10 @@ const handler = require('serve-handler');
 const schema = require('@zeit/schemas/deployment/config-static');
 const boxen = require('boxen');
 const compression = require('compression');
+const iconv = require('iconv-lite');
 
 // Utilities
+const SSI = require('./ssi.js');
 const pkg = require('../package');
 
 const readFile = promisify(fs.readFile);
@@ -82,6 +83,8 @@ const getHelp = () => chalk`
       -s, --single                        Rewrite all not-found requests to \`index.html\`
 
       -c, --config                        Specify custom path to \`serve.json\`
+
+      --charset                           override header charset for every http request of html, htm, css file
 
       -n, --no-clipboard                  Do not copy the local address to the clipboard
 
@@ -171,6 +174,23 @@ const getNetworkAddress = () => {
 	}
 };
 
+const scanContentTypeCharset = (content, ext) => {
+	const defaultCharset = 'utf-8';
+
+	let charset = [];
+	let matcher = null;
+
+	if (ext === 'html' || ext === 'htm') {
+		matcher = /<meta(?!\s*(?:name|value)\s*=)[^>]*?charset\s*=[\s"']*([^\s"'/>]*)/;
+	} else if (ext === 'css') {
+		matcher = /@charset\s*[\s"']*([^\s"'/>]*)/;
+	}
+	charset = content.match(matcher);
+	charset = charset && charset.length > 1 ? charset[1].toLowerCase() : defaultCharset;
+
+	return charset;
+};
+
 const startEndpoint = (endpoint, config, args, previous) => {
 	const {isTTY} = process.stdout;
 	const clipboard = args['--no-clipboard'] !== true;
@@ -181,21 +201,72 @@ const startEndpoint = (endpoint, config, args, previous) => {
 			await compressionHandler(request, response);
 		}
 
+		const fullPath = path.resolve() + request.url + (request.url === '/' ? 'index.html' : '');
+		const extention = fullPath.split(/\#|\?/)[0].split('.').pop()
+			.trim()
+			.toLowerCase();
+		let filecontent;
+		let newStream;
+		let charset = 'utf-8';
+
+		// if the file type is html or css we can try to detect the charset specified in the content
+		if (extention === 'css' || extention === 'html' || extention === 'htm' || extention === 'shtml') {
+			if (!config.headers) {
+				config.headers = [];
+			}
+
+			if (config.charset) {
+				charset = config.charset;
+				config.headers.push({
+					source: (request.url === '/' ? 'index.html' : request.url),
+					headers: [{
+						key: 'Content-Type',
+						value: `text/${extention}; charset=${config.charset}`
+					}]
+				});
+			} else {
+				if (!filecontent) {
+					try {
+						filecontent = fs.readFileSync(fullPath, 'utf8');
+					} catch (e) {
+						filecontent = '';
+						console.error(`could not find the file ${fullPath}`);
+					}
+				}
+
+				charset = scanContentTypeCharset(filecontent, extention);
+				config.headers.push({
+					source: (request.url === '/' ? 'index.html' : ''),
+					headers: [{
+						key: 'Content-Type',
+						value: `text/${extention}; charset=${charset}`
+					}]
+				});
+			}
+		} // if (extention === 'css' || extention === 'html' || extention === 'shtml')
+
 		return handler(request, response, config, {
 			createReadStream(pathToFile) {
 				// SSI part
-				if (pathToFile.substr(-4) === 'html' && config.ssi) {
-					const html = fs.readFileSync(pathToFile, 'utf8');
-					const ssi = new SSI({ location: config.ssi });
-					const newHtml = ssi(html);
-					const s = new Readable();
-					s._read = () => {};
-					s.push(newHtml);
-					s.push(null);
-					return s;
-				}
-				return fs.createReadStream(pathToFile);
-				// /SSI part
+				return new Promise((resolve) => {
+					if (extention === 'html' && config.ssi) {
+						fs.createReadStream(pathToFile)
+							.pipe(iconv.decodeStream(charset))
+							.collect(function hh(err, body) {
+								const ssi = new SSI({ location: config.ssi });
+								const newHtml = ssi(body.toString());
+
+								newStream = new Readable();
+								newStream._read = () => {};
+								newStream.push(iconv.encode(newHtml, charset));
+								newStream.push(null);
+
+								resolve(newStream);
+							});
+					} else {
+						resolve(fs.createReadStream(pathToFile));
+					}
+				});
 			}
 		});
 	});
@@ -361,6 +432,7 @@ const loadConfig = async (cwd, entry, args) => {
 			'--single': Boolean,
 			'--debug': Boolean,
 			'--config': String,
+			'--charset': String,
 			'--no-clipboard': Boolean,
 			'--no-compression': Boolean,
 			'--symlinks': Boolean,
@@ -435,6 +507,10 @@ const loadConfig = async (cwd, entry, args) => {
 
 	if (args['--symlinks']) {
 		config.symlinks = true;
+	}
+
+	if (args['--charset']) {
+		config.charset = args['--charset'];
 	}
 
 	for (const endpoint of args['--listen']) {
