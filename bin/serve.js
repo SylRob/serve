@@ -344,6 +344,11 @@ const loadConfig = async (cwd, entry, args) => {
 		'package.json'
 	];
 
+	const exceptionConfig = [
+		'ssi',
+		'charset'
+	];
+
 	if (args['--config']) {
 		files.unshift(args['--config']);
 	}
@@ -405,11 +410,14 @@ const loadConfig = async (cwd, entry, args) => {
 		config.public = path.relative(cwd, (public ? path.join(entry, public) : entry));
 	}
 
-	if (Object.keys(config).length !== 0) {
+	const filteredConfig = {};
+	Object.keys(config).map((s) => (exceptionConfig.indexOf(s) === -1 ? filteredConfig[s] = config[s] : s));
+
+	if (Object.keys(filteredConfig).length !== 0) {
 		const ajv = new Ajv();
 		const validateSchema = ajv.compile(schema);
 
-		if (!validateSchema(config)) {
+		if (!validateSchema(filteredConfig)) {
 			const defaultMessage = error('The configuration you provided is wrong:');
 			const {message, params} = validateSchema.errors[0];
 
