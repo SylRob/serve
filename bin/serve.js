@@ -176,7 +176,6 @@ const getNetworkAddress = () => {
 
 const scanContentTypeCharset = (content, ext) => {
 	const defaultCharset = 'utf-8';
-
 	let charset = [];
 	let matcher = null;
 
@@ -191,81 +190,110 @@ const scanContentTypeCharset = (content, ext) => {
 	return charset;
 };
 
+const extractCharset = (extention, fileContent, forcedCharset) => {
+	if (forcedCharset) {
+		return forcedCharset;
+	}
+
+	return scanContentTypeCharset(fileContent, extention);
+};
+
+const realPath = (relativePath) => {
+	const possiblePaths = [
+		path.join(relativePath, 'index.html'),
+		relativePath.endsWith('/') ? relativePath.replace(/\/$/g, '.html') : `${relativePath}.html`
+	].filter((item) => path.basename(item) !== '.html');
+
+	for (let index = 0; index < possiblePaths.length; index++) {
+		const related = possiblePaths[index];
+		const absolutePath = path.join(process.cwd(), related);
+		let exist = false;
+		try {
+			exist = fs.existsSync(absolutePath);
+		} catch (err) {
+			continue;
+		}
+
+		if (exist) {
+			return absolutePath;
+		}
+	}
+
+	return null;
+};
+
 const startEndpoint = (endpoint, config, args, previous) => {
 	const {isTTY} = process.stdout;
 	const clipboard = args['--no-clipboard'] !== true;
 	const compress = args['--no-compression'] !== true;
+	const allowExt = [
+		'css',
+		'html',
+		'htm',
+		'shtml'
+	];
 
 	const server = http.createServer(async (request, response) => {
 		if (compress) {
 			await compressionHandler(request, response);
 		}
 
-		const fullPath = path.resolve() + request.url + (request.url === '/' ? 'index.html' : '');
-		const extention = fullPath.split(/\#|\?/)[0].split('.').pop()
-			.trim()
-			.toLowerCase();
-		let filecontent;
-		let newStream;
-		let charset = 'utf-8';
+		let fullPath = path.resolve() + request.url;
+		let relativePath = request.url;
+		if (path.extname(fullPath) === '') {
+			fullPath = realPath(request.url) ? realPath(request.url) : fullPath;
+			relativePath = path.relative(process.cwd(), fullPath);
+		}
 
-		// if the file type is html or css we can try to detect the charset specified in the content
-		if (extention === 'css' || extention === 'html' || extention === 'htm' || extention === 'shtml') {
+		const extention = fullPath.split(/\#|\?/)[0].split('.').pop();
+
+		let charset = 'utf-8';
+		if (allowExt.indexOf(extention) >= 0) {
+			const fileContent = fs.readFileSync(fullPath, 'utf-8');
+			charset = extractCharset(extention, fileContent, config.charset);
+
 			if (!config.headers) {
 				config.headers = [];
 			}
 
-			if (config.charset) {
-				charset = config.charset;
-				config.headers.push({
-					source: (request.url === '/' ? 'index.html' : request.url),
-					headers: [{
-						key: 'Content-Type',
-						value: `text/${extention}; charset=${config.charset}`
-					}]
-				});
-			} else {
-				if (!filecontent) {
-					try {
-						filecontent = fs.readFileSync(fullPath, 'utf8');
-					} catch (e) {
-						filecontent = '';
-						console.error(`could not find the file ${fullPath}`);
-					}
-				}
-
-				charset = scanContentTypeCharset(filecontent, extention);
-				config.headers.push({
-					source: (request.url === '/' ? 'index.html' : ''),
-					headers: [{
-						key: 'Content-Type',
-						value: `text/${extention}; charset=${charset}`
-					}]
-				});
-			}
-		} // if (extention === 'css' || extention === 'html' || extention === 'shtml')
+			config.headers.push({
+				source: relativePath,
+				headers: [{
+					key: 'Content-Type',
+					value: `text/${extention}; charset=${config.charset ? config.charset : charset}`
+				}]
+			});
+		} // if (allowExt.indexOf(extention) >= 0)
 
 		return handler(request, response, config, {
 			createReadStream(pathToFile) {
-				// SSI part
+				const stream = fs.createReadStream(pathToFile);
+				const fileExt = path.extname(pathToFile).substring(1);
+				const stats = fs.lstatSync(pathToFile);
+
 				return new Promise((resolve) => {
-					if (extention === 'html' && config.ssi) {
-						fs.createReadStream(pathToFile)
+					if (stats.isDirectory()) {
+						resolve(stream);
+					}
+
+					// SSI part
+					if (allowExt.indexOf(fileExt) >= 0 && fileExt !== 'css' && config.ssi) {
+						stream
 							.pipe(iconv.decodeStream(charset))
-							.collect(function hh(err, body) {
+							.collect((err, body) => {
 								const ssi = new SSI({ location: config.ssi });
 								const newHtml = ssi(body.toString());
-
-								newStream = new Readable();
+								const newStream = new Readable();
 								newStream._read = () => {};
+								// newStream.push(newHtml);
 								newStream.push(iconv.encode(newHtml, charset));
 								newStream.push(null);
 
 								resolve(newStream);
 							});
 					} else {
-						resolve(fs.createReadStream(pathToFile));
-					}
+						resolve(stream);
+					} // if (allowExt.indexOf(fileExt) >= 0)
 				});
 			}
 		});
@@ -489,7 +517,6 @@ const loadConfig = async (cwd, entry, args) => {
 
 	const cwd = process.cwd();
 	const entry = args._.length > 0 ? path.resolve(args._[0]) : cwd;
-
 	const config = await loadConfig(cwd, entry, args);
 
 	if (args['--ssi']) {
