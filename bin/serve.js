@@ -88,9 +88,9 @@ const getHelp = () => chalk`
 
       -n, --no-clipboard                  Do not copy the local address to the clipboard
 
-			--ssi,															 	Set specific path to get the SSI includes
+      --ssi                               Set specific path to get the SSI includes
 
-			-S, --symlinks                      Resolve symlinks instead of showing 404 errors
+      -S, --symlinks                      Resolve symlinks instead of showing 404 errors
 
   {bold ENDPOINTS}
 
