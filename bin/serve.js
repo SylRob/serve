@@ -249,27 +249,37 @@ const startEndpoint = (endpoint, config, args, previous) => {
 
 		let charset = 'utf-8';
 		if (allowExt.indexOf(extention) >= 0) {
-			const fileContent = fs.readFileSync(fullPath, 'utf-8');
-			charset = extractCharset(extention, fileContent, config.charset);
+			try {
+				const fileContent = fs.readFileSync(fullPath, 'utf-8');
+				charset = extractCharset(extention, fileContent, config.charset);
+				if (!config.headers) {
+					config.headers = [];
+				}
 
-			if (!config.headers) {
-				config.headers = [];
+				config.headers.push({
+					source: relativePath,
+					headers: [{
+						key: 'Content-Type',
+						value: `text/${extention}; charset=${config.charset ? config.charset : charset}`
+					}]
+				});
+			} catch (err) {
+				console.log('');
 			}
-
-			config.headers.push({
-				source: relativePath,
-				headers: [{
-					key: 'Content-Type',
-					value: `text/${extention}; charset=${config.charset ? config.charset : charset}`
-				}]
-			});
 		} // if (allowExt.indexOf(extention) >= 0)
 
 		return handler(request, response, config, {
 			createReadStream(pathToFile) {
 				const stream = fs.createReadStream(pathToFile);
 				const fileExt = path.extname(pathToFile).substring(1);
-				const stats = fs.lstatSync(pathToFile);
+
+				let stats = null;
+				try {
+					stats = fs.lstatSync(pathToFile);
+				} catch (e) {
+					return stream;
+				}
+
 
 				return new Promise((resolve) => {
 					if (stats.isDirectory()) {
