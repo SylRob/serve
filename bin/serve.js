@@ -20,6 +20,7 @@ const schema = require('@zeit/schemas/deployment/config-static');
 const boxen = require('boxen');
 const compression = require('compression');
 const iconv = require('iconv-lite');
+const qrcode = require('qrcode-terminal');
 
 // Utilities
 const SSI = require('./ssi.js');
@@ -84,11 +85,11 @@ const getHelp = () => chalk`
 
       -c, --config                        Specify custom path to \`serve.json\`
 
-      --charset                           override header charset for every http request of html, htm, css file
+      --charset                           override header charset for every http request of html, htm, shtml, css file
 
       -n, --no-clipboard                  Do not copy the local address to the clipboard
 
-      --ssi                               Set specific path to get the SSI includes
+      --ssi                               Set specific URL to get the SSI includes from
 
       -S, --symlinks                      Resolve symlinks instead of showing 404 errors
 
@@ -348,6 +349,9 @@ const startEndpoint = (endpoint, config, args, previous) => {
 
 			if (networkAddress) {
 				message += `\n${chalk.bold('- On Your Network:')}  ${networkAddress}`;
+				qrcode.generate(networkAddress, {small: true}, function getQrcode(qrcodeString) {
+					message += `\n${chalk.bold('- Network adress QR code:')} \n${qrcodeString}`;
+				});
 			}
 
 			if (previous) {
