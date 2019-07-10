@@ -246,6 +246,12 @@ const startEndpoint = (endpoint, config, args, previous) => {
 			relativePath = path.relative(process.cwd(), fullPath);
 		}
 
+		// prevent url bugs when the URL contain parameter ex: /index.html?foo=bar
+		config.cleanUrls = false;
+
+		// set this to true to get slash at the end of an URL that corespond to a folder name
+		config.trailingSlash = true;
+
 		const extention = fullPath.split(/\#|\?/)[0].split('.').pop();
 
 		let charset = 'utf-8';
