@@ -265,7 +265,7 @@ const startEndpoint = (endpoint, config, args, previous) => {
 					}]
 				});
 			} catch (err) {
-				console.log('');
+				// console.log(err);
 			}
 		} // if (allowExt.indexOf(extention) >= 0)
 
@@ -292,7 +292,7 @@ const startEndpoint = (endpoint, config, args, previous) => {
 						stream
 							.pipe(iconv.decodeStream(charset))
 							.collect((err, body) => {
-								const ssi = new SSI({ location: config.ssi });
+								const ssi = new SSI({ location: config.ssi, localPath: path.resolve(), defaultCharset: charset });
 								const newHtml = ssi(body.toString());
 								const newStream = new Readable();
 								newStream._read = () => {};
