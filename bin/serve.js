@@ -21,6 +21,7 @@ const boxen = require('boxen');
 const compression = require('compression');
 const iconv = require('iconv-lite');
 const qrcode = require('qrcode-terminal');
+const chardet = require('chardet');
 
 // Utilities
 const SSI = require('./ssi.js');
@@ -175,28 +176,13 @@ const getNetworkAddress = () => {
 	}
 };
 
-const scanContentTypeCharset = (content, ext) => {
-	const defaultCharset = 'utf-8';
-	let charset = [];
-	let matcher = null;
 
-	if (ext === 'html' || ext === 'htm') {
-		matcher = /<meta(?!\s*(?:name|value)\s*=)[^>]*?charset\s*=[\s"']*([^\s"'/>]*)/;
-	} else if (ext === 'css') {
-		matcher = /@charset\s*[\s"']*([^\s"'/>]*)/;
-	}
-	charset = content.match(matcher);
-	charset = charset && charset.length > 1 ? charset[1].toLowerCase() : defaultCharset;
-
-	return charset;
-};
-
-const extractCharset = (extention, fileContent, forcedCharset) => {
+const extractCharset = (filePath, forcedCharset) => {
 	if (forcedCharset) {
 		return forcedCharset;
 	}
 
-	return scanContentTypeCharset(fileContent, extention);
+	return chardet.detectFileSync(filePath);
 };
 
 const realPath = (relativePath) => {
@@ -257,8 +243,8 @@ const startEndpoint = (endpoint, config, args, previous) => {
 		let charset = 'utf-8';
 		if (allowExt.indexOf(extention) >= 0) {
 			try {
-				const fileContent = fs.readFileSync(fullPath, 'utf-8');
-				charset = extractCharset(extention, fileContent, config.charset);
+				const tempChar = extractCharset(fullPath, config.charset);
+				charset = config.charset ? config.charset : (tempChar ? tempChar : 'utf-8');
 				if (!config.headers) {
 					config.headers = [];
 				}
