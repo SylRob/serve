@@ -382,7 +382,8 @@ const loadConfig = async (cwd, entry, args) => {
 
 	const exceptionConfig = [
 		'ssi',
-		'charset'
+		'charset',
+		'listen'
 	];
 
 	if (args['--config']) {
