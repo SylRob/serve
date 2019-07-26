@@ -92,6 +92,8 @@ const getHelp = () => chalk`
 
       --ssi                               Set specific URL to get the SSI includes from
 
+      --public                            add specific path for Base URL
+
       -S, --symlinks                      Resolve symlinks instead of showing 404 errors
 
   {bold ENDPOINTS}
@@ -440,7 +442,7 @@ const loadConfig = async (cwd, entry, args) => {
 	}
 
 	if (entry) {
-		const {public} = config;
+		const public = config.public || args['--public'];
 		config.public = path.relative(cwd, (public ? path.join(entry, public) : entry));
 	}
 
@@ -479,6 +481,7 @@ const loadConfig = async (cwd, entry, args) => {
 			'--no-compression': Boolean,
 			'--symlinks': Boolean,
 			'--ssi': String,
+			'--public': String,
 			'-h': '--help',
 			'-v': '--version',
 			'-l': '--listen',
