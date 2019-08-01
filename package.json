@@ -32,9 +32,6 @@
       "@zeit/eslint-config-node"
     ]
   },
-  "git": {
-    "pre-commit": "lint-staged"
-  },
   "dependencies": {
     "@zeit/schemas": "2.6.0",
     "ajv": "6.5.3",

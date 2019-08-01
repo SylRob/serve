@@ -286,7 +286,7 @@ const startEndpoint = (endpoint, config, args, previous) => {
 						stream
 							.pipe(iconv.decodeStream(charset))
 							.collect((err, body) => {
-								const ssi = new SSI({ location: config.ssi, localPath: path.resolve(), defaultCharset: charset });
+								const ssi = new SSI({ location: config.ssi, localPath: `${path.resolve()}/${config.public || ''}`, defaultCharset: charset });
 								const newHtml = ssi(body.toString());
 								const newStream = new Readable();
 								newStream._read = () => {};
