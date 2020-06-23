@@ -285,9 +285,9 @@ const startEndpoint = (endpoint, config, args, previous) => {
 					if (allowExt.indexOf(fileExt) >= 0 && fileExt !== 'css' && config.ssi) {
 						stream
 							.pipe(iconv.decodeStream(charset))
-							.collect((err, body) => {
+							.collect(async (err, body) => {
 								const ssi = new SSI({ location: config.ssi, localPath: `${path.resolve()}/${config.public || ''}`, defaultCharset: charset });
-								const newHtml = ssi(body.toString());
+								const newHtml = await ssi(body.toString());
 								const newStream = new Readable();
 								newStream._read = () => {};
 								// newStream.push(newHtml);
